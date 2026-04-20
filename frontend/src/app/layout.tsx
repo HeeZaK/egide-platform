@@ -1,0 +1,36 @@
+import type { Metadata } from "next";
+import localFont from "next/font/local";
+import "./globals.css";
+
+const geistSans = localFont({
+  src: "./fonts/GeistVF.woff",
+  variable: "--font-geist-sans",
+  weight: "100 900",
+});
+const geistMono = localFont({
+  src: "./fonts/GeistMonoVF.woff",
+  variable: "--font-geist-mono",
+  weight: "100 900",
+});
+
+export const metadata: Metadata = {
+  title: "Égide — Human Risk Management",
+  description:
+    "Plateforme souveraine d’évaluation du risque humain et de simulation (MVP).",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="fr" className="dark">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased font-sans bg-zinc-950 text-zinc-100`}
+      >
+        {children}
+      </body>
+    </html>
+  );
+}

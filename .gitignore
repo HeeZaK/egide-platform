@@ -1,0 +1,14 @@
+# Environnement Python
+.venv/
+__pycache__/
+*.pyc
+
+# Variables d'environnement (LE PLUS IMPORTANT)
+.env
+
+# Frontend Node.js
+node_modules/
+.next/
+
+# Fichiers OS
+.DS_Store
