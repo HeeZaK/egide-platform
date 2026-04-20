@@ -1,0 +1,107 @@
+{
+  "realm": "egide",
+  "displayName": "\u00c9gide HRM Platform",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+  "defaultSignatureAlgorithm": "RS256",
+  "accessTokenLifespan": 900,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "roles": {
+    "realm": [
+      {
+        "name": "rssi",
+        "description": "RSSI role: full access to OSINT, campaigns, risk scores and reports"
+      },
+      {
+        "name": "analyst",
+        "description": "Analyst role: read-only access to risk scores and campaign results"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "egide-api",
+      "name": "Egide HRM API",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "bearerOnly": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "attributes": {
+        "access.token.signed.response.alg": "RS256",
+        "id.token.signed.response.alg": "RS256"
+      }
+    },
+    {
+      "clientId": "egide-frontend",
+      "name": "Egide HRM Frontend (Next.js)",
+      "enabled": true,
+      "publicClient": true,
+      "bearerOnly": false,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000"
+      ],
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "access.token.signed.response.alg": "RS256"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "rssi-dev",
+      "email": "rssi@egide.local",
+      "firstName": "Dev",
+      "lastName": "RSSI",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "ChangeMe123!",
+          "temporary": true
+        }
+      ],
+      "realmRoles": ["rssi"]
+    },
+    {
+      "username": "analyst-dev",
+      "email": "analyst@egide.local",
+      "firstName": "Dev",
+      "lastName": "Analyst",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "ChangeMe123!",
+          "temporary": true
+        }
+      ],
+      "realmRoles": ["analyst"]
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+# =============================================================================
+# ÉGIDE — Sovereign HRM Platform — Local Development Stack
+# =============================================================================
+# Usage:
+#   cp .env.example .env          # fill in secrets
+#   docker compose up --build     # start all services
+#   docker compose down -v        # teardown incl. volumes
+#
+# Services:
+#   egide-api   — FastAPI backend          http://localhost:8000
+#   egide-db    — PostgreSQL 16            localhost:5432
+#   egide-kc    — Keycloak 24 (sovereign)  http://localhost:8080
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16
+  # ---------------------------------------------------------------------------
+  egide-db:
+    image: postgres:16-alpine
+    container_name: egide-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-egide}
+      POSTGRES_USER:     ${POSTGRES_USER:-egide}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-egide_dev_password}
+    volumes:
+      - egide_pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-egide} -d ${POSTGRES_DB:-egide}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - egide-net
+
+  # ---------------------------------------------------------------------------
+  # Keycloak 24 — sovereign Identity Provider (SSO / MFA / JWT RS256)
+  # ---------------------------------------------------------------------------
+  egide-kc:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: egide-kc
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      KC_DB:                  postgres
+      KC_DB_URL:              jdbc:postgresql://egide-db:5432/${POSTGRES_DB:-egide}
+      KC_DB_USERNAME:         ${POSTGRES_USER:-egide}
+      KC_DB_PASSWORD:         ${POSTGRES_PASSWORD:-egide_dev_password}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-admin_dev_password}
+      KC_HOSTNAME:            localhost
+      KC_HTTP_PORT:           "8080"
+      KC_HEALTH_ENABLED:      "true"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import
+    ports:
+      - "8080:8080"
+    depends_on:
+      egide-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - egide-net
+
+  # ---------------------------------------------------------------------------
+  # Egide FastAPI backend
+  # ---------------------------------------------------------------------------
+  egide-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: egide-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ENV:            ${APP_ENV:-dev}
+      DATABASE_URL:       postgresql+psycopg://${POSTGRES_USER:-egide}:${POSTGRES_PASSWORD:-egide_dev_password}@egide-db:5432/${POSTGRES_DB:-egide}
+      KEYCLOAK_ISSUER:    http://egide-kc:8080/realms/egide
+      KEYCLOAK_JWKS_URL:  http://egide-kc:8080/realms/egide/protocol/openid-connect/certs
+      KEYCLOAK_AUDIENCE:  ${KEYCLOAK_AUDIENCE:-egide-api}
+      CORS_ORIGINS:       ${CORS_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8000:8000"
+    depends_on:
+      egide-db:
+        condition: service_healthy
+      egide-kc:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/api/v1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - egide-net
+
+# =============================================================================
+# Volumes & Networks
+# =============================================================================
+volumes:
+  egide_pg_data:
+    driver: local
+
+networks:
+  egide-net:
+    driver: bridge
