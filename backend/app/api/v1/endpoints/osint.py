@@ -86,8 +86,10 @@ def get_persisted_osint_profile(
     try:
         profile = service.get_persisted_profile(db, profile_id)
     except ValueError as exc:
+        # FIX: était HTTP_503 (incorrect — 503 = service indisponible infrastructure).
+        # Un ValueError ici = données corrompues ou profil invalide → 422.
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from exc
 

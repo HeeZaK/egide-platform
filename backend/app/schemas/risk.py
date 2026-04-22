@@ -141,3 +141,33 @@ class RiskScoreReport(BaseModel):
     )
     computed_at: datetime
     tags: list[str] = Field(default_factory=list, max_length=20)
+
+
+class BatchRiskScoreError(BaseModel):
+    """Décrit l'échec du calcul pour un profil dans un batch."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    index: int = Field(ge=0, description="Position du profil dans la liste d'entrée")
+    target_email: str
+    detail: str
+
+
+class BatchRiskScoreReport(BaseModel):
+    """
+    FIX: Résultat d'un batch /risk/score/batch avec support des résultats partiels.
+
+    Remplace le comportement précédent (tout-ou-rien) par :
+    - ``results``  : rapports calculés avec succès
+    - ``errors``   : profils en échec avec index + détail
+    - ``partial``  : True si au moins un profil a échoué
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    results: list[RiskScoreReport]
+    errors: list[BatchRiskScoreError] = Field(default_factory=list)
+    partial: bool = False
+    total_requested: int = Field(ge=0)
+    total_computed: int = Field(ge=0)
+    total_failed: int = Field(ge=0)
