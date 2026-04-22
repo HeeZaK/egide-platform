@@ -1,58 +1,73 @@
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
-export const dynamic = "force-dynamic";
+const UPSTREAM =
+  process.env.EGIDE_API_INTERNAL_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:8000/api/v1";
+const TOKEN_COOKIE = "egide_token";
 
-const backendBase = () =>
-  (process.env.EGIDE_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
+function buildUpstreamUrl(path: string[], request: NextRequest) {
+  const upstream = new URL(`${UPSTREAM.replace(/\/$/, "")}/${path.join("/")}`);
+  request.nextUrl.searchParams.forEach((value, key) => {
+    upstream.searchParams.append(key, value);
+  });
+  return upstream;
+}
 
-async function proxy(req: NextRequest, pathParts: string[]) {
-  const suffix = pathParts.join("/");
-  const target = `${backendBase()}/api/${suffix}${req.nextUrl.search}`;
+async function proxy(request: NextRequest, ctx: { params: { path: string[] } }) {
+  const upstream = buildUpstreamUrl(ctx.params.path ?? [], request);
+  const cookieStore = cookies();
+  const token = cookieStore.get(TOKEN_COOKIE)?.value;
 
-  const token = req.cookies.get("egide_token")?.value;
   const headers = new Headers();
-  const contentType = req.headers.get("content-type");
-  if (contentType) {
-    headers.set("content-type", contentType);
-  }
-  if (token) {
-    headers.set("authorization", `Bearer ${token}`);
-  }
+  const contentType = request.headers.get("content-type");
+  if (contentType) headers.set("content-type", contentType);
+  const accept = request.headers.get("accept");
+  if (accept) headers.set("accept", accept);
+  if (token) headers.set("authorization", `Bearer ${token}`);
 
-  const hasBody = !["GET", "HEAD"].includes(req.method);
   const init: RequestInit = {
-    method: req.method,
+    method: request.method,
     headers,
-    body: hasBody ? await req.text() : undefined,
+    cache: "no-store",
+    redirect: "follow",
   };
 
-  const res = await fetch(target, init);
-  const out = new NextResponse(await res.arrayBuffer(), { status: res.status });
-  const outCt = res.headers.get("content-type");
-  if (outCt) {
-    out.headers.set("content-type", outCt);
+  if (!["GET", "HEAD"].includes(request.method)) {
+    init.body = await request.text();
   }
-  return out;
+
+  const upstreamResponse = await fetch(upstream, init);
+  const responseHeaders = new Headers();
+  const responseContentType = upstreamResponse.headers.get("content-type");
+  if (responseContentType) {
+    responseHeaders.set("content-type", responseContentType);
+  }
+
+  return new NextResponse(upstreamResponse.body, {
+    status: upstreamResponse.status,
+    statusText: upstreamResponse.statusText,
+    headers: responseHeaders,
+  });
 }
 
-type Ctx = { params: { path: string[] } };
-
-export async function GET(req: NextRequest, ctx: Ctx) {
-  return proxy(req, ctx.params.path);
+export async function GET(request: NextRequest, ctx: { params: { path: string[] } }) {
+  return proxy(request, ctx);
 }
 
-export async function POST(req: NextRequest, ctx: Ctx) {
-  return proxy(req, ctx.params.path);
+export async function POST(request: NextRequest, ctx: { params: { path: string[] } }) {
+  return proxy(request, ctx);
 }
 
-export async function PUT(req: NextRequest, ctx: Ctx) {
-  return proxy(req, ctx.params.path);
+export async function PUT(request: NextRequest, ctx: { params: { path: string[] } }) {
+  return proxy(request, ctx);
 }
 
-export async function PATCH(req: NextRequest, ctx: Ctx) {
-  return proxy(req, ctx.params.path);
+export async function PATCH(request: NextRequest, ctx: { params: { path: string[] } }) {
+  return proxy(request, ctx);
 }
 
-export async function DELETE(req: NextRequest, ctx: Ctx) {
-  return proxy(req, ctx.params.path);
+export async function DELETE(request: NextRequest, ctx: { params: { path: string[] } }) {
+  return proxy(request, ctx);
 }

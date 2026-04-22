@@ -1,6 +1,5 @@
 import { CampaignChart } from "@/components/charts/CampaignChart";
 import { RiskScoreChart } from "@/components/charts/RiskScoreChart";
-import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -8,7 +7,6 @@ import { StatCard } from "@/components/ui/StatCard";
 import { computeRiskScoreBatch } from "@/lib/api";
 import type { RiskInput, RiskScoreReport } from "@/lib/types";
 
-// Mock dataset — replace with DB query when persistence layer is ready
 const MOCK_TARGETS: RiskInput[] = [
   {
     target_email: "camille.r@corp.local",
@@ -67,7 +65,6 @@ async function getDashboardData(): Promise<RiskScoreReport[]> {
   try {
     return await computeRiskScoreBatch(MOCK_TARGETS);
   } catch {
-    // Backend unavailable — return empty to keep UI functional
     return [];
   }
 }
@@ -80,6 +77,7 @@ export default async function DashboardPage() {
       ? Math.round(reports.reduce((s, r) => s + r.score, 0) / reports.length)
       : null;
 
+  const averageGrade = reports[0]?.grade ?? "—";
   const highRisk = reports.filter((r) => ["E", "F"].includes(r.grade));
   const criticalCount = reports.filter((r) => r.grade === "F").length;
 
@@ -87,7 +85,7 @@ export default async function DashboardPage() {
     {
       label: "Score moyen global",
       value: avgScore !== null ? `${avgScore}/100` : "—",
-      delta: avgScore !== null ? `Grade ${reports[0]?.grade ?? "—"}` : "Backend hors ligne",
+      delta: avgScore !== null ? `Grade ${averageGrade}` : "Backend hors ligne",
     },
     {
       label: "Profils analysés",
@@ -107,80 +105,79 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <main className="flex min-h-screen bg-slate-950">
-      <Sidebar />
-      <section className="flex-1 p-6 lg:p-10">
-        <Topbar />
+    <section className="space-y-6">
+      <Topbar
+        title="Tableau de bord RSSI"
+        subtitle="Pilotage du risque humain, campagnes actives et priorisation des remédiations."
+        globalBadge={avgScore !== null ? `Score global ${averageGrade}` : "Backend hors ligne"}
+      />
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {metrics.map((m) => (
-            <StatCard key={m.label} {...m} />
-          ))}
-        </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {metrics.map((m) => (
+          <StatCard key={m.label} {...m} />
+        ))}
+      </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-2">
-          <RiskScoreChart />
-          <CampaignChart />
-        </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <RiskScoreChart />
+        <CampaignChart />
+      </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <Card>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-white">Scores de risque — temps réel</h3>
-                <p className="text-sm text-slate-400">Données calculées via POST /risk/score/batch</p>
-              </div>
-              <Badge variant="warning">{highRisk.length} prioritaires</Badge>
+      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <Card>
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-white">Scores de risque — temps réel</h3>
+              <p className="text-sm text-slate-400">Données calculées via POST /risk/score/batch</p>
             </div>
+            <Badge variant="warning">{highRisk.length} prioritaires</Badge>
+          </div>
 
-            {reports.length === 0 ? (
-              <p className="text-sm text-slate-400">Backend indisponible — démarrez docker compose up --build</p>
-            ) : (
-              <div className="space-y-3">
-                {reports.map((report) => (
-                  <div
-                    key={report.report_id}
-                    className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3"
-                  >
-                    <div>
-                      <p className="font-medium text-white">{report.target_email}</p>
-                      <p className="text-xs text-slate-400">
-                        {report.factors.length} facteurs analysés
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-slate-400">Score {Math.round(report.score)}/100</p>
-                      <p className={`font-semibold ${gradeColor[report.grade] ?? "text-white"}`}>
-                        Grade {report.grade}
-                      </p>
-                    </div>
+          {reports.length === 0 ? (
+            <p className="text-sm text-slate-400">Backend indisponible — démarrez docker compose up --build</p>
+          ) : (
+            <div className="space-y-3">
+              {reports.map((report) => (
+                <div
+                  key={report.report_id}
+                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3"
+                >
+                  <div>
+                    <p className="font-medium text-white">{report.target_email}</p>
+                    <p className="text-xs text-slate-400">{report.factors.length} facteurs analysés</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          <Card>
-            <h3 className="text-lg font-semibold text-white">Recommandations RSSI</h3>
-            <div className="mt-4 space-y-2">
-              {reports.length === 0 ? (
-                <p className="text-sm text-slate-400">Aucune donnée</p>
-              ) : (
-                [...new Set(reports.flatMap((r) => r.recommendations))]
-                  .slice(0, 5)
-                  .map((rec, i) => (
-                    <div
-                      key={i}
-                      className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-3 text-sm text-slate-300"
-                    >
-                      {rec}
-                    </div>
-                  ))
-              )}
+                  <div className="text-right">
+                    <p className="text-sm text-slate-400">Score {Math.round(report.score)}/100</p>
+                    <p className={`font-semibold ${gradeColor[report.grade] ?? "text-white"}`}>
+                      Grade {report.grade}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
-          </Card>
-        </div>
-      </section>
-    </main>
+          )}
+        </Card>
+
+        <Card>
+          <h3 className="mb-4 text-lg font-semibold text-white">Recommandations prioritaires</h3>
+          {reports.length === 0 ? (
+            <p className="text-sm text-slate-400">Aucune recommandation disponible sans backend.</p>
+          ) : (
+            <div className="space-y-3">
+              {reports.slice(0, 3).map((report) => (
+                <div key={report.report_id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                  <p className="mb-2 text-sm font-medium text-white">{report.target_email}</p>
+                  <ul className="space-y-2 text-sm text-slate-300">
+                    {report.recommendations.slice(0, 2).map((rec) => (
+                      <li key={rec}>• {rec}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+    </section>
   );
 }

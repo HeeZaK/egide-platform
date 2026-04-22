@@ -1,97 +1,44 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, EmailStr
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.deps.auth import require_rssi_principal
-from app.core.config import settings
-from app.core.crypto import decode_aes256_key_b64
-from app.db.session import get_db
-from app.schemas.auth import Principal
-from app.schemas.osint import OsintEnrichmentResponse, OsintProfile
-from app.services.osint_service import OsintService
+from app.api.deps import get_db
+from app.schemas.osint import OsintEnrichmentResponse, OsintProfileResponse
+from app.services.osint_service import OSINTService
 
-router = APIRouter()
+router = APIRouter(prefix="/osint", tags=["OSINT"])
 
 
-class OsintLookupRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    email: EmailStr
-
-
-def get_osint_service() -> OsintService:
-    return OsintService()
-
-
-@router.post(
-    "/lookup",
-    response_model=OsintEnrichmentResponse,
-    summary="Enrichit un profil OSINT à partir d'une adresse e-mail",
-    description=(
-        "Collecte passive de données B2B (LinkedIn, enrichissement) et vérification "
-        "des fuites d'identifiants. Requiert le rôle Keycloak **rssi**. "
-        "**Sécurité** : aucun mot de passe cible n'est collecté ni stocké."
-    ),
-)
-async def lookup_osint_profile(
-    payload: OsintLookupRequest,
-    persist: bool = False,
+@router.post("/lookup", response_model=OsintEnrichmentResponse, status_code=status.HTTP_200_OK)
+def enrich_osint_profile(
+    email: str = Query(..., min_length=6, max_length=254),
+    persist: bool = Query(False),
     db: Session = Depends(get_db),
-    service: OsintService = Depends(get_osint_service),
-    _principal: Principal = Depends(require_rssi_principal),
 ) -> OsintEnrichmentResponse:
-    """
-    **POST /api/v1/osint/lookup**
-
-    - ``persist=false`` (défaut) : retourne le profil sans écriture en base.
-    - ``persist=true`` : chiffre les données sensibles (AES-256-GCM) et persiste
-      en base PostgreSQL. Requiert ``EGIDE_FIELD_ENCRYPTION_KEY_B64``.
-    """
-    if persist and decode_aes256_key_b64(settings.field_encryption_key_b64) is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "Persistence requires EGIDE_FIELD_ENCRYPTION_KEY_B64 "
-                "(base64-encoded 32-byte AES-256 key)"
-            ),
-        )
-    try:
-        return await service.lookup_by_email(
-            email=payload.email,
-            persist=persist,
-            db=db,
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
+    service = OSINTService(db)
+    return service.enrich_by_email(email=email, persist=persist)
 
 
 @router.get(
     "/profiles/{profile_id}",
-    response_model=OsintProfile,
-    summary="Récupère un profil OSINT persisté",
+    response_model=OsintProfileResponse,
+    status_code=status.HTTP_200_OK,
 )
 def get_persisted_osint_profile(
     profile_id: str,
-    _principal: Principal = Depends(require_rssi_principal),
     db: Session = Depends(get_db),
-    service: OsintService = Depends(get_osint_service),
-) -> OsintProfile:
-    if decode_aes256_key_b64(settings.field_encryption_key_b64) is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Reading persisted profiles requires EGIDE_FIELD_ENCRYPTION_KEY_B64",
-        )
+) -> OsintProfileResponse:
     try:
-        profile = service.get_persisted_profile(db, profile_id)
+        parsed_profile_id = UUID(profile_id)
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="profile_id must be a valid UUID",
         ) from exc
 
-    if profile is None:
+    service = OSINTService(db)
+    result = service.get_persisted_profile(str(parsed_profile_id))
+    if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
-
-    return profile
+    return OsintProfileResponse(profile=result)

@@ -1,27 +1,73 @@
-from __future__ import annotations
-
-from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl
-
-from app.schemas.hibp import LeakCheckResult
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class CompanyInfo(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(min_length=2, max_length=120)
-    website: HttpUrl
-    industry: str = Field(min_length=2, max_length=100)
-    employee_count: int = Field(ge=1, le=1_000_000)
-    country: str = Field(min_length=2, max_length=2, description="ISO country code")
+    name: str | None = Field(default=None, max_length=120)
+    domain: str | None = Field(default=None, max_length=120)
+    employee_count: int | None = Field(default=None, ge=1)
+    industry: str | None = Field(default=None, max_length=120)
 
 
 class EmploymentInfo(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid")
 
-    title: str = Field(min_length=2, max_length=120)
+    title: str | None = Field(default=None, max_length=120)
+    seniority: str | None = Field(default=None, max_length=60)
+    department: str | None = Field(default=None, max_length=80)
+
+
+class OsintProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    profile_id: str = Field(..., min_length=36, max_length=36)
+    email: EmailStr
+    full_name: str | None = Field(default=None, max_length=120)
+    first_name: str | None = Field(default=None, max_length=60)
+    last_name: str | None = Field(default=None, max_length=60)
+    linkedin_url: str | None = Field(default=None, max_length=300)
+    company: CompanyInfo | None = None
+    employment: EmploymentInfo | None = None
+    exposed_on_linkedin: bool = False
+    breach_count: int = Field(0, ge=0, le=1000)
+    breached: bool = False
+    breach_includes_passwords: bool = False
+    tags: list[str] = Field(default_factory=list)
+
+
+class OsintEnrichmentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    profile: OsintProfile
+    persisted: bool = False
+
+
+class OsintProfileResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    profile: OsintProfile
+
+
+class HIBPBreachSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    breached: bool
+    breach_count: int = Field(ge=0, le=1000)
+    breach_includes_passwords: bool = False
+
+
+class LinkedInSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    found: bool
+    profile_url: str | None = Field(default=None, max_length=300)
+    full_name: str | None = Field(default=None, max_length=120)
+    current_company: str | None = Field(default=None, max_length=120)
+    current_title: str | None = Field(default=None, max_length=120)
     seniority: Literal[
         "intern",
         "junior",
@@ -31,60 +77,6 @@ class EmploymentInfo(BaseModel):
         "manager",
         "director",
         "vp",
-        "cxo",
+        "c_level",
         "unknown",
-    ]
-    department: str = Field(min_length=2, max_length=120)
-
-
-class B2BEnrichmentResult(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    provider: str = Field(min_length=2, max_length=60)
-    confidence_score: float = Field(ge=0.0, le=1.0)
-    full_name: str = Field(min_length=2, max_length=200)
-    first_name: str = Field(min_length=1, max_length=80)
-    last_name: str = Field(min_length=1, max_length=80)
-    linkedin_url: HttpUrl
-    company: CompanyInfo
-    employment: EmploymentInfo
-
-
-class OsintProfile(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    profile_id: str = Field(min_length=36, max_length=36)
-    email: EmailStr
-    source_provider: str = Field(min_length=2, max_length=60)
-    confidence_score: float = Field(ge=0.0, le=1.0)
-    full_name: str = Field(min_length=2, max_length=200)
-    first_name: str = Field(min_length=1, max_length=80)
-    last_name: str = Field(min_length=1, max_length=80)
-    linkedin_url: HttpUrl
-    company: CompanyInfo
-    employment: EmploymentInfo
-    collected_at: datetime
-    tags: list[str] = Field(default_factory=list, max_length=20)
-
-
-class SensitiveOsintPayload(BaseModel):
-    """Subset of OSINT profile encrypted at rest (PII / high-sensitivity fields)."""
-
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    email: EmailStr
-    full_name: str = Field(min_length=2, max_length=200)
-    first_name: str = Field(min_length=1, max_length=80)
-    last_name: str = Field(min_length=1, max_length=80)
-    linkedin_url: HttpUrl
-    company: CompanyInfo
-    employment: EmploymentInfo
-    tags: list[str] = Field(default_factory=list, max_length=20)
-
-
-class OsintEnrichmentResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    profile: OsintProfile
-    leak_check: LeakCheckResult
-    persisted: bool = False
+    ] = "unknown"

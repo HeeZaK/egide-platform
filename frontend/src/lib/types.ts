@@ -42,17 +42,33 @@ export interface RiskScoreReport {
 }
 
 // ─── OSINT ───────────────────────────────────────────────────────────────────
+export interface OsintCompany {
+  name?: string;
+  domain?: string;
+  employee_count?: number;
+  industry?: string;
+}
+
+export interface OsintEmployment {
+  title?: string;
+  seniority?: string;
+  department?: string;
+}
+
 export interface OsintProfile {
-  id: string;
+  profile_id: string;
   email: string;
   full_name?: string;
-  company?: string;
-  job_title?: string;
-  seniority?: string;
+  first_name?: string;
+  last_name?: string;
+  linkedin_url?: string;
+  company?: OsintCompany;
+  employment?: OsintEmployment;
   exposed_on_linkedin?: boolean;
   breach_count?: number;
   breached?: boolean;
   breach_includes_passwords?: boolean;
+  tags?: string[];
 }
 
 export interface OsintEnrichmentResponse {
