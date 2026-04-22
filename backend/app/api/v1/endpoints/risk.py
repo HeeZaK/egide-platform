@@ -9,30 +9,24 @@ from app.schemas.risk import RiskInput, RiskScoreReport
 
 router = APIRouter()
 
+_BATCH_MAX = 200
 
-# ---------------------------------------------------------------------------
-# Dependency
-# ---------------------------------------------------------------------------
 
 def get_risk_score_engine() -> RiskScoreEngine:
     return RiskScoreEngine()
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
 @router.post(
     "/score",
     response_model=RiskScoreReport,
     status_code=status.HTTP_200_OK,
-    summary="Compute a Human Risk Score",
+    summary="Calcule un Score de Risque Humain",
     description=(
-        "Aggregates OSINT seniority, public exposure, HIBP breach history, "
-        "phishing simulation outcomes (boolean flags only — no passwords), "
-        "and awareness training completion into a normalized 0-100 risk score "
-        "mapped to a letter grade (A→F). "
-        "Requires the **rssi** Keycloak role."
+        "Agrège la séniorité OSINT, l'exposition publique, l'historique HIBP, "
+        "les résultats de simulation de phishing (flags booléens uniquement — aucun mot de passe), "
+        "et la complétion des modules de sensibilisation en un score normalisé 0-100 "
+        "mappé à une note (A→F). "
+        "Requiert le rôle Keycloak **rssi**."
     ),
 )
 def compute_risk_score(
@@ -40,15 +34,6 @@ def compute_risk_score(
     _principal: Principal = Depends(require_rssi_principal),
     engine: RiskScoreEngine = Depends(get_risk_score_engine),
 ) -> RiskScoreReport:
-    """
-    **POST /api/v1/risk/score**
-
-    Returns a full ``RiskScoreReport`` with:
-    - Normalized score (0-100)
-    - Letter grade A→F
-    - Per-factor breakdown with weights and contributions
-    - Actionable recommendations in French for the RSSI
-    """
     try:
         return engine.compute(risk_input=payload)
     except ValueError as exc:
@@ -62,11 +47,11 @@ def compute_risk_score(
     "/score/batch",
     response_model=list[RiskScoreReport],
     status_code=status.HTTP_200_OK,
-    summary="Compute Human Risk Scores for multiple targets",
+    summary="Calcule les Scores de Risque Humain pour plusieurs cibles",
     description=(
-        "Batch version of /risk/score. Accepts up to 200 RiskInput objects "
-        "and returns a RiskScoreReport for each. Useful for department-level "
-        "or company-wide scoring in the RSSI Dashboard."
+        f"Version batch de /risk/score. Accepte jusqu'à {_BATCH_MAX} objets RiskInput "
+        "et retourne un RiskScoreReport pour chacun. Utile pour le scoring par département "
+        "ou à l'échelle de l'entreprise depuis le Dashboard RSSI."
     ),
 )
 def compute_risk_scores_batch(
@@ -77,17 +62,23 @@ def compute_risk_scores_batch(
     if not payloads:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Payload list must not be empty.",
+            detail="La liste de payloads ne doit pas être vide.",
         )
-    if len(payloads) > 200:
+    if len(payloads) > _BATCH_MAX:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Batch size exceeds the limit of 200 targets per request.",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Maximum {_BATCH_MAX} profils par batch (reçu : {len(payloads)}).",
         )
-    try:
-        return [engine.compute(risk_input=p) for p in payloads]
-    except ValueError as exc:
+    results: list[RiskScoreReport] = []
+    errors: list[str] = []
+    for i, p in enumerate(payloads):
+        try:
+            results.append(engine.compute(risk_input=p))
+        except ValueError as exc:
+            errors.append(f"[{i}] {p.target_email}: {exc}")
+    if errors:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": "Certains profils ont échoué au calcul", "errors": errors},
+        )
+    return results

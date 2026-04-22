@@ -22,13 +22,30 @@ def get_osint_service() -> OsintService:
     return OsintService()
 
 
-@router.post("/lookup", response_model=OsintEnrichmentResponse)
+@router.post(
+    "/lookup",
+    response_model=OsintEnrichmentResponse,
+    summary="Enrichit un profil OSINT à partir d'une adresse e-mail",
+    description=(
+        "Collecte passive de données B2B (LinkedIn, enrichissement) et vérification "
+        "des fuites d'identifiants. Requiert le rôle Keycloak **rssi**. "
+        "**Sécurité** : aucun mot de passe cible n'est collecté ni stocké."
+    ),
+)
 async def lookup_osint_profile(
     payload: OsintLookupRequest,
     persist: bool = False,
     db: Session = Depends(get_db),
     service: OsintService = Depends(get_osint_service),
+    _principal: Principal = Depends(require_rssi_principal),
 ) -> OsintEnrichmentResponse:
+    """
+    **POST /api/v1/osint/lookup**
+
+    - ``persist=false`` (défaut) : retourne le profil sans écriture en base.
+    - ``persist=true`` : chiffre les données sensibles (AES-256-GCM) et persiste
+      en base PostgreSQL. Requiert ``EGIDE_FIELD_ENCRYPTION_KEY_B64``.
+    """
     if persist and decode_aes256_key_b64(settings.field_encryption_key_b64) is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -50,7 +67,11 @@ async def lookup_osint_profile(
         ) from exc
 
 
-@router.get("/profiles/{profile_id}", response_model=OsintProfile)
+@router.get(
+    "/profiles/{profile_id}",
+    response_model=OsintProfile,
+    summary="Récupère un profil OSINT persisté",
+)
 def get_persisted_osint_profile(
     profile_id: str,
     _principal: Principal = Depends(require_rssi_principal),
